@@ -229,6 +229,7 @@ export interface ComposerThreadDraftState {
 	activeProvider: ProviderKind | null;
 	runtimeMode: RuntimeMode | null;
 	interactionMode: ProviderInteractionMode | null;
+	workflowPromptId: string | null;
 }
 
 /**
@@ -426,6 +427,10 @@ interface ComposerDraftStoreState {
 		contextId: string,
 	) => void;
 	clearTerminalContexts: (threadRef: ComposerThreadTarget) => void;
+	setWorkflowPromptId: (
+		threadRef: ComposerThreadTarget,
+		workflowPromptId: string | null,
+	) => void;
 	clearPersistedAttachments: (threadRef: ComposerThreadTarget) => void;
 	syncPersistedAttachments: (
 		threadRef: ComposerThreadTarget,
@@ -507,6 +512,7 @@ const EMPTY_THREAD_DRAFT = Object.freeze<ComposerThreadDraftState>({
 	activeProvider: null,
 	runtimeMode: null,
 	interactionMode: null,
+	workflowPromptId: null,
 });
 
 function createEmptyThreadDraft(): ComposerThreadDraftState {
@@ -520,6 +526,7 @@ function createEmptyThreadDraft(): ComposerThreadDraftState {
 		activeProvider: null,
 		runtimeMode: null,
 		interactionMode: null,
+		workflowPromptId: null,
 	};
 }
 
@@ -595,12 +602,15 @@ function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
 		Object.keys(draft.modelSelectionByProvider).length === 0 &&
 		draft.activeProvider === null &&
 		draft.runtimeMode === null &&
-		draft.interactionMode === null
+		draft.interactionMode === null &&
+		draft.workflowPromptId === null
 	);
 }
 
 function normalizeProviderKind(value: unknown): ProviderKind | null {
-	return value === "codex" || value === "claudeAgent" || value === "glmClaudeAgent"
+	return value === "codex" ||
+		value === "claudeAgent" ||
+		value === "glmClaudeAgent"
 		? value
 		: null;
 }
@@ -807,7 +817,11 @@ function legacyToModelSelectionByProvider(
 	const result: Partial<Record<ProviderKind, ModelSelection>> = {};
 	// Add entries from the options bag (for non-active providers)
 	if (modelOptions) {
-		for (const provider of ["codex", "claudeAgent", "glmClaudeAgent"] as const) {
+		for (const provider of [
+			"codex",
+			"claudeAgent",
+			"glmClaudeAgent",
+		] as const) {
 			const options = modelOptions[provider];
 			if (options && Object.keys(options).length > 0) {
 				result[provider] = {
@@ -1956,6 +1970,7 @@ function toHydratedThreadDraft(
 		activeProvider,
 		runtimeMode: persistedDraft.runtimeMode ?? null,
 		interactionMode: persistedDraft.interactionMode ?? null,
+		workflowPromptId: null,
 	};
 }
 
@@ -2537,7 +2552,11 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
 						}
 						const base = existing ?? createEmptyThreadDraft();
 						const nextMap = { ...base.modelSelectionByProvider };
-						for (const provider of ["codex", "claudeAgent", "glmClaudeAgent"] as const) {
+						for (const provider of [
+							"codex",
+							"claudeAgent",
+							"glmClaudeAgent",
+						] as const) {
 							// Only touch providers explicitly present in the input
 							if (!normalizedOpts || !(provider in normalizedOpts)) continue;
 							const opts = normalizedOpts[provider];
@@ -2964,6 +2983,36 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
 						const nextDraft: ComposerThreadDraftState = {
 							...current,
 							terminalContexts: [],
+						};
+						const nextDraftsByThreadKey = { ...state.draftsByThreadKey };
+						if (shouldRemoveDraft(nextDraft)) {
+							delete nextDraftsByThreadKey[threadKey];
+						} else {
+							nextDraftsByThreadKey[threadKey] = nextDraft;
+						}
+						return { draftsByThreadKey: nextDraftsByThreadKey };
+					});
+				},
+				setWorkflowPromptId: (threadRef, workflowPromptId) => {
+					const threadKey =
+						resolveComposerDraftKey(get(), threadRef) ?? "";
+					if (threadKey.length === 0) {
+						return;
+					}
+					const nextId =
+						typeof workflowPromptId === "string" &&
+						workflowPromptId.length > 0
+							? workflowPromptId
+							: null;
+					set((state) => {
+						const existing =
+							state.draftsByThreadKey[threadKey] ?? createEmptyThreadDraft();
+						if (existing.workflowPromptId === nextId) {
+							return state;
+						}
+						const nextDraft: ComposerThreadDraftState = {
+							...existing,
+							workflowPromptId: nextId,
 						};
 						const nextDraftsByThreadKey = { ...state.draftsByThreadKey };
 						if (shouldRemoveDraft(nextDraft)) {

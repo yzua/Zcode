@@ -123,6 +123,7 @@ import {
 	AVAILABLE_PROVIDER_OPTIONS,
 	ProviderModelPicker,
 } from "./ProviderModelPicker";
+import { WorkflowPromptPicker } from "./WorkflowPromptPicker";
 
 const IMAGE_SIZE_LIMIT_LABEL = `${Math.round(PROVIDER_SEND_TURN_MAX_IMAGE_BYTES / (1024 * 1024))}MB`;
 
@@ -379,6 +380,7 @@ export interface ChatComposerHandle {
 		selectedProvider: ProviderKind;
 		selectedModel: string;
 		selectedProviderModels: ReadonlyArray<ServerProvider["models"][number]>;
+		selectedWorkflowPromptId: string | null;
 	};
 }
 
@@ -571,6 +573,7 @@ export const ChatComposer = memo(
 			const composerImages = composerDraft.images;
 			const composerTerminalContexts = composerDraft.terminalContexts;
 			const nonPersistedComposerImageIds = composerDraft.nonPersistedImageIds;
+			const workflowPromptId = composerDraft.workflowPromptId;
 
 			const setComposerDraftPrompt = useComposerDraftStore(
 				(store) => store.setPrompt,
@@ -598,6 +601,9 @@ export const ChatComposer = memo(
 			);
 			const syncComposerDraftPersistedAttachments = useComposerDraftStore(
 				(store) => store.syncPersistedAttachments,
+			);
+			const setComposerDraftWorkflowPromptId = useComposerDraftStore(
+				(store) => store.setWorkflowPromptId,
 			);
 			const getComposerDraft = useComposerDraftStore(
 				(store) => store.getComposerDraft,
@@ -656,6 +662,7 @@ export const ChatComposer = memo(
 					selectedModel,
 					selectedProvider,
 					selectedProviderModels,
+					workflowPromptId,
 				],
 			);
 
@@ -685,8 +692,9 @@ export const ChatComposer = memo(
 							(provider) => provider.provider === "claudeAgent",
 						)?.models ?? [],
 					glmClaudeAgent:
-						providerStatuses.find((provider) => provider.provider === "glmClaudeAgent")
-							?.models ?? [],
+						providerStatuses.find(
+							(provider) => provider.provider === "glmClaudeAgent",
+						)?.models ?? [],
 				}),
 				[providerStatuses],
 			);
@@ -765,14 +773,22 @@ export const ChatComposer = memo(
 			// ------------------------------------------------------------------
 			// Derived: composer send state
 			// ------------------------------------------------------------------
-			const composerSendState = useMemo(
+			const composerSendStateRaw = useMemo(
 				() =>
 					deriveComposerSendState({
 						prompt,
-						imageCount: composerImages.length,
-						terminalContexts: composerTerminalContexts,
-					}),
+							imageCount: composerImages.length,
+							terminalContexts: composerTerminalContexts,
+						}),
 				[composerImages.length, composerTerminalContexts, prompt],
+			);
+			const composerSendState = useMemo(
+				() => ({
+					...composerSendStateRaw,
+					hasSendableContent:
+						composerSendStateRaw.hasSendableContent || workflowPromptId !== null,
+				}),
+				[composerSendStateRaw, workflowPromptId],
 			);
 
 			// ------------------------------------------------------------------
@@ -1963,6 +1979,7 @@ export const ChatComposer = memo(
 						selectedProvider,
 						selectedModel,
 						selectedProviderModels,
+						selectedWorkflowPromptId: workflowPromptId,
 					}),
 				}),
 				[
@@ -2211,6 +2228,16 @@ export const ChatComposer = memo(
 													}
 												: {})}
 											onProviderModelChange={onProviderModelSelect}
+										/>
+
+										<Separator
+											orientation="vertical"
+											className="mx-0.5 hidden h-4 sm:block"
+										/>
+										<WorkflowPromptPicker
+											value={workflowPromptId}
+											onChange={(id) => setComposerDraftWorkflowPromptId(composerDraftTarget, id)}
+											compact={isComposerFooterCompact}
 										/>
 
 										{isComposerFooterCompact ? (
