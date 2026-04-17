@@ -9,65 +9,69 @@
  *
  * @module RoutingTextGeneration
  */
-import { Effect, Layer, Context } from "effect";
+import { Context, Effect, Layer } from "effect";
 
 import {
-  TextGeneration,
-  type TextGenerationProvider,
-  type TextGenerationShape,
+	TextGeneration,
+	type TextGenerationProvider,
+	type TextGenerationShape,
 } from "../Services/TextGeneration.ts";
-import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
 import { ClaudeTextGenerationLive } from "./ClaudeTextGeneration.ts";
+import { CodexTextGenerationLive } from "./CodexTextGeneration.ts";
 
 // ---------------------------------------------------------------------------
 // Internal service tags so both concrete layers can coexist.
 // ---------------------------------------------------------------------------
 
 class CodexTextGen extends Context.Service<CodexTextGen, TextGenerationShape>()(
-  "t3/git/Layers/RoutingTextGeneration/CodexTextGen",
+	"t3/git/Layers/RoutingTextGeneration/CodexTextGen",
 ) {}
 
-class ClaudeTextGen extends Context.Service<ClaudeTextGen, TextGenerationShape>()(
-  "t3/git/Layers/RoutingTextGeneration/ClaudeTextGen",
-) {}
+class ClaudeTextGen extends Context.Service<
+	ClaudeTextGen,
+	TextGenerationShape
+>()("t3/git/Layers/RoutingTextGeneration/ClaudeTextGen") {}
 
 // ---------------------------------------------------------------------------
 // Routing implementation
 // ---------------------------------------------------------------------------
 
 const makeRoutingTextGeneration = Effect.gen(function* () {
-  const codex = yield* CodexTextGen;
-  const claude = yield* ClaudeTextGen;
+	const codex = yield* CodexTextGen;
+	const claude = yield* ClaudeTextGen;
 
-  const route = (provider?: TextGenerationProvider): TextGenerationShape =>
-    provider === "claudeAgent" ? claude : codex;
+	const route = (provider?: TextGenerationProvider): TextGenerationShape =>
+		provider === "claudeAgent" || provider === "glmClaudeAgent" ? claude : codex;
 
-  return {
-    generateCommitMessage: (input) =>
-      route(input.modelSelection.provider).generateCommitMessage(input),
-    generatePrContent: (input) => route(input.modelSelection.provider).generatePrContent(input),
-    generateBranchName: (input) => route(input.modelSelection.provider).generateBranchName(input),
-    generateThreadTitle: (input) => route(input.modelSelection.provider).generateThreadTitle(input),
-  } satisfies TextGenerationShape;
+	return {
+		generateCommitMessage: (input) =>
+			route(input.modelSelection.provider).generateCommitMessage(input),
+		generatePrContent: (input) =>
+			route(input.modelSelection.provider).generatePrContent(input),
+		generateBranchName: (input) =>
+			route(input.modelSelection.provider).generateBranchName(input),
+		generateThreadTitle: (input) =>
+			route(input.modelSelection.provider).generateThreadTitle(input),
+	} satisfies TextGenerationShape;
 });
 
 const InternalCodexLayer = Layer.effect(
-  CodexTextGen,
-  Effect.gen(function* () {
-    const svc = yield* TextGeneration;
-    return svc;
-  }),
+	CodexTextGen,
+	Effect.gen(function* () {
+		const svc = yield* TextGeneration;
+		return svc;
+	}),
 ).pipe(Layer.provide(CodexTextGenerationLive));
 
 const InternalClaudeLayer = Layer.effect(
-  ClaudeTextGen,
-  Effect.gen(function* () {
-    const svc = yield* TextGeneration;
-    return svc;
-  }),
+	ClaudeTextGen,
+	Effect.gen(function* () {
+		const svc = yield* TextGeneration;
+		return svc;
+	}),
 ).pipe(Layer.provide(ClaudeTextGenerationLive));
 
 export const RoutingTextGenerationLive = Layer.effect(
-  TextGeneration,
-  makeRoutingTextGeneration,
+	TextGeneration,
+	makeRoutingTextGeneration,
 ).pipe(Layer.provide(InternalCodexLayer), Layer.provide(InternalClaudeLayer));

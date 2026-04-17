@@ -9,46 +9,54 @@
  */
 import { Effect, Layer } from "effect";
 
-import { ProviderUnsupportedError, type ProviderAdapterError } from "../Errors.ts";
-import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
 import {
-  ProviderAdapterRegistry,
-  type ProviderAdapterRegistryShape,
-} from "../Services/ProviderAdapterRegistry.ts";
+	type ProviderAdapterError,
+	ProviderUnsupportedError,
+} from "../Errors.ts";
 import { ClaudeAdapter } from "../Services/ClaudeAdapter.ts";
 import { CodexAdapter } from "../Services/CodexAdapter.ts";
+import { GlmAdapter } from "../Services/GlmAdapter.ts";
+import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
+import {
+	ProviderAdapterRegistry,
+	type ProviderAdapterRegistryShape,
+} from "../Services/ProviderAdapterRegistry.ts";
 
 export interface ProviderAdapterRegistryLiveOptions {
-  readonly adapters?: ReadonlyArray<ProviderAdapterShape<ProviderAdapterError>>;
+	readonly adapters?: ReadonlyArray<ProviderAdapterShape<ProviderAdapterError>>;
 }
 
-const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(function* (
-  options?: ProviderAdapterRegistryLiveOptions,
-) {
-  const adapters =
-    options?.adapters !== undefined
-      ? options.adapters
-      : [yield* CodexAdapter, yield* ClaudeAdapter];
-  const byProvider = new Map(adapters.map((adapter) => [adapter.provider, adapter]));
+const makeProviderAdapterRegistry = Effect.fn("makeProviderAdapterRegistry")(
+	function* (options?: ProviderAdapterRegistryLiveOptions) {
+		const adapters =
+			options?.adapters !== undefined
+				? options.adapters
+				: [yield* CodexAdapter, yield* ClaudeAdapter, yield* GlmAdapter];
+		const byProvider = new Map(
+			adapters.map((adapter) => [adapter.provider, adapter]),
+		);
 
-  const getByProvider: ProviderAdapterRegistryShape["getByProvider"] = (provider) => {
-    const adapter = byProvider.get(provider);
-    if (!adapter) {
-      return Effect.fail(new ProviderUnsupportedError({ provider }));
-    }
-    return Effect.succeed(adapter);
-  };
+		const getByProvider: ProviderAdapterRegistryShape["getByProvider"] = (
+			provider,
+		) => {
+			const adapter = byProvider.get(provider);
+			if (!adapter) {
+				return Effect.fail(new ProviderUnsupportedError({ provider }));
+			}
+			return Effect.succeed(adapter);
+		};
 
-  const listProviders: ProviderAdapterRegistryShape["listProviders"] = () =>
-    Effect.sync(() => Array.from(byProvider.keys()));
+		const listProviders: ProviderAdapterRegistryShape["listProviders"] = () =>
+			Effect.sync(() => Array.from(byProvider.keys()));
 
-  return {
-    getByProvider,
-    listProviders,
-  } satisfies ProviderAdapterRegistryShape;
-});
+		return {
+			getByProvider,
+			listProviders,
+		} satisfies ProviderAdapterRegistryShape;
+	},
+);
 
 export const ProviderAdapterRegistryLive = Layer.effect(
-  ProviderAdapterRegistry,
-  makeProviderAdapterRegistry(),
+	ProviderAdapterRegistry,
+	makeProviderAdapterRegistry(),
 );
